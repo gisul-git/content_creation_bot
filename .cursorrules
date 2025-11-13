@@ -1,0 +1,122 @@
+# AI-Powered Content Creation Chatbot - Cursor AI Configuration
+
+## Project Overview
+You are working on an AI-driven conversational assistant that helps users create different types of digital content (videos, images, text, SCORM courses) through an interactive chat interface.
+
+## Tech Stack
+
+### Frontend
+- React + Vite
+- CSS (custom minimal styling)
+- Responsive Chat UI with smooth scroll, typing effects, and realistic delays
+
+### Backend
+- FastAPI (Python 3.11+)
+- OpenAI API for summarization and tone polishing
+- In-memory session storage (can be extended to Redis/SQLite)
+
+## Core Architecture
+
+### Backend Endpoints
+- `/chat/start` - Initialize chat session
+- `/chat/answer` - Process user answers during clarification
+- `/chat/confirm` - Handle confirmation before content generation
+
+### Backend Modules
+- `chat_routes.py` - Main chat flow handlers
+- `intent_classifier.py` - Detects user intent (video, image, text, SCORM, greeting)
+- `clarifier_engine.py` - Handles field extraction and missing questions
+- `responses.py` - Base greetings and generic prompts
+- `summary_engine.py` - Uses OpenAI API to generate natural summaries
+- `session_store.py` - Manages chat sessions in-memory
+- `router_agent.py` - Routes requests appropriately
+
+### Frontend Components
+- `ChatBot.jsx` - Main chat component
+- `api.js` - API communication layer
+- Handles small talk locally (greetings, thanks, etc.)
+
+## Conversation Flow
+
+1. **Greeting Phase**: Detects greetings, introduces itself, asks about content type
+2. **Clarification Phase**: Dynamically asks for missing info (topic, duration, style, tone, etc.)
+3. **Confirmation Phase**: Generates natural summary, asks for confirmation
+4. **Generation Phase**: On confirmation, starts content generation
+
+## Code Quality Standards
+
+- Write clean, readable, production-grade code
+- Keep code modular and scalable
+- Use proper error handling
+- Maintain existing conversation flow logic
+- Don't break backend integration
+- Add type hints in Python
+- Use environment variables for sensitive data (OpenAI keys)
+
+## Current Features
+✅ Core conversation flow with greeting, clarification, confirmation
+✅ Small talk handling (hi, hello, thanks, bye)
+✅ Typing simulation ("💭 Thinking...")
+✅ Session restart via "new" or "restart" keywords
+✅ Error handling for backend unavailability
+✅ Automatic scroll to latest message
+
+## Enhancement Priorities
+
+1. **UI/UX Improvements**
+   - Typing animation (character-by-character reveal)
+   - Bot avatar (circular AI face icon)
+   - Message timestamps
+   - Smooth fade-in transitions
+   - Dark/light theme toggle
+   - Full mobile responsiveness
+
+2. **Context Awareness**
+   - Session persistence using localStorage
+   - Remember user name across sessions
+   - Support "What's my last project?" queries
+
+3. **Backend Extensions**
+   - Add `/generate` endpoint for actual content generation
+   - Store sessions in Redis or SQLite
+   - Enable logging & metrics
+
+4. **Code Quality**
+   - Add TypeScript support for frontend
+   - Use environment variables properly
+   - Add docker-compose.yml for deployment
+   - Configure CORS properly
+
+## File Structure
+```
+project-root/
+├── app/
+│   ├── main.py
+│   ├── chat_routes.py
+│   ├── intent_classifier.py
+│   ├── clarifier_engine.py
+│   ├── router_agent.py
+│   ├── responses.py
+│   ├── summary_engine.py
+│   ├── session_store.py
+│   └── __init__.py
+├── frontend/
+│   ├── src/
+│   │   ├── api.js
+│   │   ├── components/
+│   │   │   ├── ChatBot.jsx
+│   │   │   └── ChatBot.css
+│   │   └── main.jsx
+│   ├── index.html
+│   └── vite.config.js
+├── .env
+└── requirements.txt
+```
+
+## Important Notes
+- Maintain backward compatibility with existing API contracts
+- Keep conversation logic intact
+- Ensure smooth integration between frontend and backend
+- Use emoji and friendly phrasing for bot personality
+- Support natural language interactions
+

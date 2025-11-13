@@ -1,0 +1,90 @@
+{
+  "name": "AI-Powered Content Creation Chatbot",
+  "description": "An AI-driven conversational assistant that helps users create videos, images, text, or SCORM courses through an interactive chat interface",
+  "version": "1.0.0",
+  "techStack": {
+    "frontend": ["React", "Vite", "CSS"],
+    "backend": ["FastAPI", "Python 3.11+", "OpenAI API"]
+  },
+  "architecture": {
+    "backend": {
+      "framework": "FastAPI",
+      "endpoints": [
+        "/chat/start",
+        "/chat/answer",
+        "/chat/confirm"
+      ],
+      "modules": [
+        "chat_routes.py - Main chat flow handlers",
+        "intent_classifier.py - Detects user intent",
+        "clarifier_engine.py - Field extraction and missing questions",
+        "responses.py - Base greetings and prompts",
+        "summary_engine.py - OpenAI-powered summaries",
+        "session_store.py - In-memory session management",
+        "router_agent.py - Request routing"
+      ]
+    },
+    "frontend": {
+      "framework": "React + Vite",
+      "components": [
+        "ChatBot.jsx - Main chat component",
+        "api.js - API communication layer"
+      ],
+      "features": [
+        "Small talk handling (local)",
+        "Typing simulation",
+        "Session restart",
+        "Error handling",
+        "Auto-scroll"
+      ]
+    }
+  },
+  "conversationFlow": {
+    "phases": [
+      "Greeting - Detects greetings, introduces, asks content type",
+      "Clarification - Dynamically asks for missing info",
+      "Confirmation - Generates summary, asks confirmation",
+      "Generation - Starts content generation on confirmation"
+    ]
+  },
+  "currentFeatures": [
+    "Core conversation flow",
+    "Small talk handling",
+    "Typing simulation",
+    "Session restart",
+    "Error handling",
+    "Auto-scroll"
+  ],
+  "enhancementGoals": {
+    "uiux": [
+      "Typing animation (character-by-character)",
+      "Bot avatar",
+      "Message timestamps",
+      "Fade-in transitions",
+      "Dark/light theme toggle",
+      "Mobile responsiveness"
+    ],
+    "contextAwareness": [
+      "Session persistence (localStorage)",
+      "Remember user name",
+      "Support project history queries"
+    ],
+    "backend": [
+      "/generate endpoint",
+      "Redis/SQLite session storage",
+      "Logging & metrics"
+    ],
+    "codeQuality": [
+      "TypeScript support",
+      "Environment variables",
+      "Docker compose",
+      "CORS configuration"
+    ]
+  },
+  "codeStandards": {
+    "python": "Type hints, clean modular code, error handling",
+    "javascript": "ES6+, clean readable code, proper error handling",
+    "general": "Production-grade, scalable, maintainable"
+  }
+}
+
