@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, Loader2, User, CheckCircle2 } from 'lucide-react';
+import { getGoogleOAuthUrl, getMicrosoftOAuthUrl } from '@/lib/auth-api';
 
 export default function SignupPage() {
   const [error, setError] = useState('');
@@ -41,6 +42,14 @@ export default function SignupPage() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = getGoogleOAuthUrl();
+  };
+
+  const handleMicrosoftLogin = () => {
+    window.location.href = getMicrosoftOAuthUrl();
   };
 
   const onSubmit = async (e) => {
@@ -333,6 +342,7 @@ export default function SignupPage() {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
+              onClick={handleGoogleLogin}
               className="group relative inline-flex justify-center items-center py-2 px-2.5 border-2 border-[#f1dcba] rounded-lg shadow-sm bg-white text-xs font-semibold text-gray-700 hover:bg-[#f1dcba]/20 hover:border-[#6953a3]/30 hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200"
             >
               <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" viewBox="0 0 24 24">
@@ -346,6 +356,7 @@ export default function SignupPage() {
 
             <button
               type="button"
+              onClick={handleMicrosoftLogin}
               className="group relative inline-flex justify-center items-center py-2 px-2.5 border-2 border-[#f1dcba] rounded-lg shadow-sm bg-white text-xs font-semibold text-gray-700 hover:bg-[#f1dcba]/20 hover:border-[#6953a3]/30 hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200"
             >
               <svg className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" viewBox="0 0 24 24">

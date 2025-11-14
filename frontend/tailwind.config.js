@@ -26,6 +26,7 @@ module.exports = {
         'float': 'float 6s ease-in-out infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
         'shimmer': 'shimmer 2s linear infinite',
+        'fade-in': 'fade-in 0.3s ease-out',
       },
       keyframes: {
         float: {
