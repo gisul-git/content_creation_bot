@@ -1,34 +1,43 @@
-# GitHub Actions CI/CD Pipeline
+# GitHub Actions CI/CD Pipeline - Content Creation Bot
 # Save this as: .github/workflows/deploy.yml
+# This workflow builds images, pushes to DockerHub, and deploys to VM
 
 name: CI/CD - Build, Push & Deploy
 
 on:
   push:
     branches:
-      - dev
-      - main
+      - dev      # Trigger on dev branch
+      - main     # Trigger on main branch
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout code
+      # ============================================
+      # STEP 1: Checkout Repository Code
+      # ============================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker Buildx
+      # ============================================
+      # STEP 2: Set up Docker Buildx
+      # ============================================
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Log in to DockerHub
+      # ============================================
+      # STEP 3: Log in to DockerHub
+      # ============================================
       - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Step 4: Build and Push Backend Image
+      # ============================================
+      # STEP 4: Build and Push Backend Image
+      # ============================================
       - name: Build and Push Backend
         uses: docker/build-push-action@v5
         with:
@@ -41,7 +50,9 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/content_creation_bot-backend:latest
           cache-to: type=inline
 
-      # Step 5: Build and Push Frontend Image
+      # ============================================
+      # STEP 5: Build and Push Frontend Image
+      # ============================================
       - name: Build and Push Frontend
         uses: docker/build-push-action@v5
         with:
@@ -54,52 +65,126 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/content_creation_bot-frontend:latest
           cache-to: type=inline
 
-      # Step 6: Deploy to VM via SSH
+      # ============================================
+      # STEP 6: Deploy docker-compose.yml to VM
+      # ============================================
+      - name: Copy docker-compose.yml to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          source: "docker-compose.yml"
+          target: "/opt/content_creation_bot/"
+
+      # ============================================
+      # STEP 7: Deploy to VM via SSH
+      # ============================================
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          command_timeout: 20m
           script: |
+            set -e  # Exit on any error
+            echo "============================================"
+            echo "🚀 Starting Deployment Process"
+            echo "============================================"
             # Navigate to project directory
+            echo "📂 Navigating to project directory..."
             cd /opt/content_creation_bot || exit 1
-            
+            # Login to DockerHub
+            echo "🔐 Logging into DockerHub..."
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
             # Pull latest images
-            echo "Pulling latest Docker images..."
-            docker-compose pull
-            
+            echo "⬇️  Pulling latest Docker images..."
+            docker compose pull || {
+              echo "❌ Failed to pull images"
+              exit 1
+            }
             # Stop and remove old containers
-            echo "Stopping old containers..."
-            docker-compose down
-            
+            echo "🛑 Stopping old containers..."
+            docker compose down || echo "No containers to stop"
             # Start new containers
-            echo "Starting new containers..."
-            docker-compose up -d
-            
+            echo "🚀 Starting new containers..."
+            docker compose up -d || {
+              echo "❌ Failed to start containers"
+              exit 1
+            }
             # Wait for services to be healthy
-            echo "Waiting for services to start..."
-            sleep 10
-            
+            echo "⏳ Waiting for services to start (15 seconds)..."
+            sleep 15
             # Show running containers
-            docker-compose ps
-            
+            echo "📊 Container status:"
+            docker compose ps
+            # Check container health
+            echo "🏥 Checking container health..."
+            docker compose ps --format json | jq -r '.[] | "\(.Service): \(.State)"'
             # Clean up old images
-            echo "Cleaning up old Docker images..."
-            docker image prune -af --filter "until=24h"
-            
+            echo "🧹 Cleaning up old Docker images..."
+            docker image prune -af --filter "until=24h" || echo "No images to clean"
+            echo "============================================"
             echo "✅ Deployment completed successfully!"
+            echo "============================================"
+            echo "Backend running on: http://103.173.99.253:8001"
+            echo "Frontend running on: http://103.173.99.253:3000"
 
-      # Step 7: Verify Deployment
-      - name: Verify Backend Health
+      # ============================================
+      # STEP 8: Verify Deployment Health
+      # ============================================
+      - name: Verify Deployment Health
+        if: success()
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            echo "Checking backend health..."
-            curl -f http://localhost:8000/health || echo "⚠️ Backend health check failed"
-            echo "Checking frontend..."
-            curl -f http://localhost:3000 || echo "⚠️ Frontend health check failed"
+            echo "============================================"
+            echo "🏥 Running Health Checks"
+            echo "============================================"
+            # Wait a bit more for services to fully start
+            sleep 10
+            # Check backend health
+            echo "🔍 Checking backend health (port 8001)..."
+            if curl -f -s http://localhost:8001/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy"
+            else
+              echo "⚠️  Backend health check failed - checking logs..."
+              docker compose logs backend --tail 20
+            fi
+            # Check frontend
+            echo "🔍 Checking frontend (port 3000)..."
+            if curl -f -s http://localhost:3000 > /dev/null 2>&1; then
+              echo "✅ Frontend is healthy"
+            else
+              echo "⚠️  Frontend health check failed - checking logs..."
+              docker compose logs frontend --tail 20
+            fi
+            # Show final container status
+            echo "============================================"
+            echo "📊 Final Container Status:"
+            docker compose ps
+            echo "============================================"
 
+      # ============================================
+      # STEP 9: Send Notification on Failure
+      # ============================================
+      - name: Deployment Failed
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "============================================"
+            echo "❌ DEPLOYMENT FAILED"
+            echo "============================================"
+            echo "Showing container logs for debugging:"
+            cd /opt/content_creation_bot
+            docker compose logs --tail 50
