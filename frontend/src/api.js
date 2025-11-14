@@ -2,7 +2,8 @@
  * API communication layer for chatbot.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Use Next.js environment variable or fallback to default
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:8000';
 
 /**
  * Start a new chat session.
@@ -183,4 +184,3 @@ export async function updateContext(sessionId, content) {
     throw error;
   }
 }
-

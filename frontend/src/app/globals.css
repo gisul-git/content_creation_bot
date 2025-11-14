@@ -9,9 +9,11 @@
   
   body {
     @apply font-sans antialiased;
+    margin: 0;
+    padding: 0;
   }
   
-  #root {
+  html, body {
     @apply w-full h-screen;
   }
 }
@@ -39,5 +41,10 @@
     background-size: 1000px 100%;
     animation: shimmer 2s linear infinite;
   }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 

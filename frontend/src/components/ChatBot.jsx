@@ -1,5 +1,7 @@
+'use client'
+
 import { useState, useEffect, useRef } from 'react';
-import { startChat, sendAnswer, uploadFile, updateContext } from '../api';
+import { startChat, sendAnswer, uploadFile, updateContext } from '@/api';
 import './ChatBot.css';
 
 /**
