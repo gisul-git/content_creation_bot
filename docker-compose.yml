@@ -61,14 +61,11 @@ services:
   # Backend API Service (FastAPI)
   # ============================================
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-backend:latest
     container_name: content_bot_backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-8001}:8000"  # External port (default 8001) to avoid conflicts
+      - "8001:8000"  # External port 8001 (GisulMatch uses 8000)
     environment:
       # ============================================
       # Database Configuration
@@ -106,7 +103,7 @@ services:
       # ============================================
       # URL Configuration
       # ============================================
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://103.173.99.253:3000}
       BACKEND_URL: ${BACKEND_URL:-http://103.173.99.253:8001}
       
       # ============================================
@@ -151,18 +148,9 @@ services:
       RATE_LIMIT_FORGOT_PASSWORD: 3/hour
       RATE_LIMIT_RESEND_VERIFICATION: 3/hour
       
-    depends_on:
-      # Uncomment if using standalone MongoDB/Redis:
-      # mongodb:
-      #   condition: service_healthy
-      # redis:
-      #   condition: service_healthy
-      # For shared resources, remove depends_on or keep empty
+    # depends_on removed - using shared MongoDB/Redis from external network
     networks:
-      # For standalone deployment:
-      - content_bot_network
-      # For shared resources (GisulMatch):
-      - gisulmatch_net
+      - gisulmatch_net  # Join GisulMatch network to access shared MongoDB and Redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -179,14 +167,11 @@ services:
   # Frontend Service (Next.js)
   # ============================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-frontend:latest
     container_name: content_bot_frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "3000:3000"  # Port 3000 is free (GisulMatch uses 8080)
     environment:
       # ============================================
       # Next.js Environment Variables
@@ -204,10 +189,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      # For standalone deployment:
-      - content_bot_network
-      # For shared resources (GisulMatch):
-      - gisulmatch_net
+      - gisulmatch_net  # Join GisulMatch network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
@@ -223,18 +205,10 @@ services:
 # ============================================
 # Networks Configuration
 # ============================================
+# Use existing GisulMatch network (shared resources)
 networks:
-  # Internal network for standalone deployment
-  content_bot_network:
-    driver: bridge
-    name: content_bot_network
-  
-  # External network for shared resources (GisulMatch)
-  # This network must exist before running docker-compose up
-  # Create it with: docker network create gisulmatch_net
   gisulmatch_net:
     external: true
-    name: gisulmatch_net
 
 # ============================================
 # Volumes Configuration (for standalone MongoDB/Redis)
