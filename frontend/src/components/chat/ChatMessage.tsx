@@ -4,11 +4,114 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ThumbsUp, Heart, Smile, Plus, RotateCw } from 'lucide-react';
 import { Message } from '@/types/chat';
+import { useChat } from '@/contexts/ChatContext';
 
 interface ChatMessageProps {
   message: Message;
+}
+
+interface MessageActionsProps {
+  message: Message;
+}
+
+function MessageActions({ message }: MessageActionsProps) {
+  const { currentChat, loadChatHistory } = useChat();
+  const [showReactions, setShowReactions] = useState(false);
+  const reactions = ['👍', '👎', '❤️', '🎉', '🤔'];
+  
+  // Get message index in chat
+  const messageIndex = currentChat?.messages.findIndex(m => m.id === message.id) ?? -1;
+  
+  const handleToggleReaction = async (reaction: string) => {
+    if (!currentChat || messageIndex === -1) return;
+    
+    try {
+      const { toggleReaction } = await import('@/lib/chat-api');
+      await toggleReaction(currentChat.id, messageIndex, reaction);
+      
+      // Reload chat to get updated reactions
+      await loadChatHistory();
+    } catch (error) {
+      console.error('Failed to toggle reaction:', error);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 mt-2 px-1">
+      {/* Existing reactions */}
+      {message.reactions && message.reactions.length > 0 && (
+        <div className="flex items-center gap-1">
+          {message.reactions.map((reaction, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleToggleReaction(reaction)}
+              className="text-sm hover:scale-125 transition-transform"
+              title={`Remove ${reaction}`}
+            >
+              {reaction}
+            </button>
+          ))}
+        </div>
+      )}
+      
+      {/* Add reaction button */}
+      <button
+        onClick={() => setShowReactions(!showReactions)}
+        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        title="Add reaction"
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+      
+      {/* Reaction picker */}
+      {showReactions && (
+        <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1 shadow-lg">
+          {reactions.map(r => (
+            <button
+              key={r}
+              onClick={() => {
+                handleToggleReaction(r);
+                setShowReactions(false);
+              }}
+              className="text-lg hover:scale-125 transition-transform p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              title={`React with ${r}`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
+      
+      {/* Regenerate button */}
+      {messageIndex > 0 && (
+        <button
+          onClick={async () => {
+            if (!currentChat || messageIndex === -1) return;
+            
+            try {
+              const { regenerateMessage } = await import('@/lib/chat-api');
+              await regenerateMessage(currentChat.id, messageIndex);
+              
+              // Reload chat to get updated message
+              await loadChatHistory();
+              // Refresh page to show updated message
+              window.location.reload();
+            } catch (error) {
+              console.error('Failed to regenerate:', error);
+              alert('Failed to regenerate response');
+            }
+          }}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs ml-auto flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          title="Regenerate response"
+        >
+          <RotateCw className="w-3 h-3" />
+          <span>Regenerate</span>
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function ChatMessage({ message }: ChatMessageProps) {
@@ -101,9 +204,17 @@ export default function ChatMessage({ message }: ChatMessageProps) {
               >
                 {message.content}
               </ReactMarkdown>
+              {/* Streaming cursor */}
+              {message.isStreaming && (
+                <span className="inline-block w-1 h-4 ml-1 bg-blue-500 animate-pulse" />
+              )}
             </div>
           )}
         </div>
+        {/* Reactions and actions for AI messages */}
+        {!isUser && (
+          <MessageActions message={message} />
+        )}
         <span
           className={`text-xs text-gray-500 dark:text-gray-400 mt-1 block ${isUser ? 'text-right' : 'text-left'}`}
         >

@@ -3,7 +3,7 @@ User model using Beanie ODM.
 """
 from beanie import Document, Indexed
 from pydantic import EmailStr, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -79,6 +79,7 @@ class User(Document):
     
     # Preferences
     email_preferences: EmailPreferences = Field(default_factory=EmailPreferences)
+    preferences: Dict[str, Any] = Field(default_factory=dict)  # UI preferences (theme, fontSize, etc.)
     
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)

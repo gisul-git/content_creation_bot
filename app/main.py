@@ -15,6 +15,8 @@ from app.routes.auth import router as auth_router
 from app.routes.oauth import router as oauth_router
 from app.routes.admin import router as admin_router
 from app.routes.users import router as users_router
+from app.routes.chats import router as chats_router
+from app.routes.preferences import router as preferences_router
 from app.services.oauth_service import OAuthService
 from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection, connect_to_redis, close_redis_connection
@@ -171,6 +173,8 @@ app.include_router(auth_router)
 app.include_router(oauth_router)
 app.include_router(admin_router)
 app.include_router(users_router)
+app.include_router(chats_router)  # Chat persistence routes
+app.include_router(preferences_router)  # User preferences routes
 
 
 @app.on_event("startup")

@@ -1,64 +1,24 @@
 # Docker Compose Configuration for Content Creation Bot
 # Save this as: docker-compose.yml (in project root directory)
-# This configuration avoids port conflicts with GisulMatch project
+# Optimized version - shares MongoDB and Redis with GisulMatch to save resources
 
 version: '3.8'
 
 services:
-  # MongoDB Database - Using different port (27018) to avoid conflict
-  mongodb:
-    image: mongo:7
-    container_name: content_bot_mongodb
-    restart: unless-stopped
-    ports:
-      - "27018:27017"  # Changed from 27017 to avoid GisulMatch conflict
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme123}
-      MONGO_INITDB_DATABASE: content_creation_bot
-    volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
-    networks:
-      - content_bot_network
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis Cache - Using different port (6380) to avoid conflict
-  redis:
-    image: redis:7-alpine
-    container_name: content_bot_redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"  # Changed from 6379 to avoid GisulMatch conflict
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme123}
-    volumes:
-      - redis_data:/data
-    networks:
-      - content_bot_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "changeme123", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Backend API (FastAPI) - Using different port (8001) to avoid conflict
+  # Backend API (FastAPI) - Using port 8001 to avoid conflict with GisulMatch
   backend:
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-backend:latest
     container_name: content_bot_backend
     restart: unless-stopped
     ports:
-      - "8001:8000"  # Changed external port from 8000 to 8001 (GisulMatch uses 8000)
+      - "8001:8000"  # External port 8001 (GisulMatch uses 8000)
     environment:
-      # Database - connects to internal MongoDB port 27017
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-changeme123}@mongodb:27017/content_creation_bot?authSource=admin
+      # Database - Shared MongoDB with GisulMatch (different database name)
+      MONGODB_URL: mongodb://gisulmatch-mongo:27017/content_creation_bot
       MONGODB_DB_NAME: content_creation_bot
-      # Redis - connects to internal Redis port 6379
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme123}@redis:6379/0
-      # Application
+      # Redis - Shared Redis with GisulMatch (using DB 2 for isolation)
+      REDIS_URL: redis://gisulmatch-redis:6379/2
+      # Application Settings
       ENVIRONMENT: production
       DEBUG: "false"
       # Security
@@ -86,20 +46,15 @@ services:
       MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://103.173.99.253:8001/api/auth/callback/azure-ad}
       # OpenAI API
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - content_bot_network
+      - gisulmatch_net  # Join GisulMatch network to access shared MongoDB and Redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Frontend (Next.js) - Port 3000 is available (no conflict)
+  # Frontend (Next.js) - Port 3000 is available (no conflict with GisulMatch)
   frontend:
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-frontend:latest
     container_name: content_bot_frontend
@@ -114,21 +69,14 @@ services:
     depends_on:
       - backend
     networks:
-      - content_bot_network
+      - gisulmatch_net  # Join GisulMatch network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+# Use existing GisulMatch network (shares MongoDB and Redis)
 networks:
-  content_bot_network:
-    driver: bridge
-
-volumes:
-  mongodb_data:
-    driver: local
-  mongodb_config:
-    driver: local
-  redis_data:
-    driver: local
+  gisulmatch_net:
+    external: true

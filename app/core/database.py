@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.session import Session
 from app.models.token import PasswordResetToken, EmailVerificationToken
 from app.models.audit_log import AuditLog
+from app.models.chat import Chat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ async def connect_to_mongo():
                 PasswordResetToken,
                 EmailVerificationToken,
                 AuditLog,
+                Chat,
             ]
         )
         
