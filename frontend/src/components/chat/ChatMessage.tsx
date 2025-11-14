@@ -7,6 +7,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check, ThumbsUp, Heart, Smile, Plus, RotateCw } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { useChat } from '@/contexts/ChatContext';
+import { logger } from '@/utils/logger';
 
 interface ChatMessageProps {
   message: Message;
@@ -17,7 +18,7 @@ interface MessageActionsProps {
 }
 
 function MessageActions({ message }: MessageActionsProps) {
-  const { currentChat, loadChatHistory } = useChat();
+  const { currentChat, loadChatHistory, selectChat } = useChat();
   const [showReactions, setShowReactions] = useState(false);
   const reactions = ['👍', '👎', '❤️', '🎉', '🤔'];
   
@@ -33,8 +34,12 @@ function MessageActions({ message }: MessageActionsProps) {
       
       // Reload chat to get updated reactions
       await loadChatHistory();
+      // Refresh current chat view
+      if (currentChat.id) {
+        await selectChat(currentChat.id);
+      }
     } catch (error) {
-      console.error('Failed to toggle reaction:', error);
+      logger.error('Failed to toggle reaction:', error);
     }
   };
 
@@ -94,12 +99,15 @@ function MessageActions({ message }: MessageActionsProps) {
               const { regenerateMessage } = await import('@/lib/chat-api');
               await regenerateMessage(currentChat.id, messageIndex);
               
-              // Reload chat to get updated message
+              // Reload chat history and refresh current chat view
               await loadChatHistory();
-              // Refresh page to show updated message
-              window.location.reload();
+              
+              // Select the chat again to update UI with regenerated message
+              if (currentChat.id) {
+                await selectChat(currentChat.id);
+              }
             } catch (error) {
-              console.error('Failed to regenerate:', error);
+              logger.error('Failed to regenerate:', error);
               alert('Failed to regenerate response');
             }
           }}

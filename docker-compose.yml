@@ -1,82 +1,252 @@
 # Docker Compose Configuration for Content Creation Bot
-# Save this as: docker-compose.yml (in project root directory)
-# Optimized version - shares MongoDB and Redis with GisulMatch to save resources
+# Complete production-ready setup with all services
+#
+# Usage Options:
+# 1. Standalone: Uncomment MongoDB and Redis services below for independent deployment
+# 2. Shared Resources: Use external network (gisulmatch_net) to share MongoDB/Redis with GisulMatch
+#
+# For shared resources, ensure the external network exists:
+#   docker network create gisulmatch_net  # Only needed once
 
 version: '3.8'
 
 services:
-  # Backend API (FastAPI) - Using port 8001 to avoid conflict with GisulMatch
+  # ============================================
+  # MongoDB Database Service (Optional - for standalone deployment)
+  # ============================================
+  # Uncomment this section if you want to run your own MongoDB instance
+  # mongodb:
+  #   image: mongo:7
+  #   container_name: content_bot_mongodb
+  #   restart: unless-stopped
+  #   ports:
+  #     - "27018:27017"  # External port 27018 to avoid conflicts
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: admin
+  #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme123}
+  #     MONGO_INITDB_DATABASE: content_creation_bot
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #     - mongodb_config:/data/configdb
+  #   networks:
+  #     - content_bot_network
+  #   healthcheck:
+  #     test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ============================================
+  # Redis Cache Service (Optional - for standalone deployment)
+  # ============================================
+  # Uncomment this section if you want to run your own Redis instance
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: content_bot_redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6380:6379"  # External port 6380 to avoid conflicts
+  #   command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme123}
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - content_bot_network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-changeme123}", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ============================================
+  # Backend API Service (FastAPI)
+  # ============================================
   backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-backend:latest
     container_name: content_bot_backend
     restart: unless-stopped
     ports:
-      - "8001:8000"  # External port 8001 (GisulMatch uses 8000)
+      - "${BACKEND_PORT:-8001}:8000"  # External port (default 8001) to avoid conflicts
     environment:
-      # Database - Shared MongoDB with GisulMatch (different database name)
+      # ============================================
+      # Database Configuration
+      # ============================================
+      # For standalone MongoDB:
+      # MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-changeme123}@mongodb:27017/content_creation_bot?authSource=admin
+      # For shared MongoDB (GisulMatch):
       MONGODB_URL: mongodb://gisulmatch-mongo:27017/content_creation_bot
       MONGODB_DB_NAME: content_creation_bot
-      # Redis - Shared Redis with GisulMatch (using DB 2 for isolation)
+      
+      # For standalone Redis:
+      # REDIS_URL: redis://:${REDIS_PASSWORD:-changeme123}@redis:6379/0
+      # For shared Redis (GisulMatch):
       REDIS_URL: redis://gisulmatch-redis:6379/2
+      REDIS_SESSION_DB: 0
+      REDIS_CACHE_DB: 1
+      
+      # ============================================
       # Application Settings
-      ENVIRONMENT: production
+      # ============================================
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       DEBUG: "false"
-      # Security
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production-min-32-chars}
+      APP_NAME: Content Creation Bot
+      
+      # ============================================
+      # Security Configuration
+      # ============================================
+      SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
-      # URLs - using port 8001 for backend
-      FRONTEND_URL: ${FRONTEND_URL:-http://103.173.99.253:3000}
+      REFRESH_TOKEN_REMEMBER_DAYS: 30
+      BCRYPT_ROUNDS: 12
+      
+      # ============================================
+      # URL Configuration
+      # ============================================
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       BACKEND_URL: ${BACKEND_URL:-http://103.173.99.253:8001}
-      # CORS - allow frontend on port 3000
-      ALLOWED_ORIGINS: http://localhost:3000,http://103.173.99.253:3000,http://103.173.99.253
+      
+      # ============================================
+      # CORS Configuration
+      # ============================================
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://103.173.99.253:3000,http://103.173.99.253}
+      
+      # ============================================
       # Email Configuration (AWS SES)
+      # ============================================
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       SES_SENDER_EMAIL: ${SES_SENDER_EMAIL:-noreply@yourdomain.com}
-      # OAuth Credentials
+      SES_SENDER_NAME: Content Creation Bot
+      
+      # ============================================
+      # OAuth Configuration - Google
+      # ============================================
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://103.173.99.253:8001/api/v1/auth/google/callback}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-${BACKEND_URL:-http://103.173.99.253:8001}/api/v1/auth/google/callback}
+      
+      # ============================================
+      # OAuth Configuration - Microsoft/Azure AD
+      # ============================================
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
-      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://103.173.99.253:8001/api/auth/callback/azure-ad}
-      # OpenAI API
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-${BACKEND_URL:-http://103.173.99.253:8001}/api/auth/callback/azure-ad}
+      
+      # ============================================
+      # OpenAI API Configuration
+      # ============================================
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      
+      # ============================================
+      # Rate Limiting Configuration
+      # ============================================
+      RATE_LIMIT_LOGIN: 5/15minute
+      RATE_LIMIT_REGISTER: 3/hour
+      RATE_LIMIT_FORGOT_PASSWORD: 3/hour
+      RATE_LIMIT_RESEND_VERIFICATION: 3/hour
+      
+    depends_on:
+      # Uncomment if using standalone MongoDB/Redis:
+      # mongodb:
+      #   condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+      # For shared resources, remove depends_on or keep empty
     networks:
-      - gisulmatch_net  # Join GisulMatch network to access shared MongoDB and Redis
+      # For standalone deployment:
+      - content_bot_network
+      # For shared resources (GisulMatch):
+      - gisulmatch_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Frontend (Next.js) - Port 3000 is available (no conflict with GisulMatch)
+  # ============================================
+  # Frontend Service (Next.js)
+  # ============================================
   frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     image: ${DOCKERHUB_USERNAME:-gisul}/content_creation_bot-frontend:latest
     container_name: content_bot_frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"  # Port 3000 is free (GisulMatch uses 8080)
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      # API URL - points to backend on port 8001
+      # ============================================
+      # Next.js Environment Variables
+      # ============================================
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      
+      # ============================================
+      # API Configuration
+      # ============================================
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://103.173.99.253:8001}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://103.173.99.253:3000}
-      NODE_ENV: production
+      
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
-      - gisulmatch_net  # Join GisulMatch network
+      # For standalone deployment:
+      - content_bot_network
+      # For shared resources (GisulMatch):
+      - gisulmatch_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-# Use existing GisulMatch network (shares MongoDB and Redis)
+# ============================================
+# Networks Configuration
+# ============================================
 networks:
+  # Internal network for standalone deployment
+  content_bot_network:
+    driver: bridge
+    name: content_bot_network
+  
+  # External network for shared resources (GisulMatch)
+  # This network must exist before running docker-compose up
+  # Create it with: docker network create gisulmatch_net
   gisulmatch_net:
     external: true
+    name: gisulmatch_net
+
+# ============================================
+# Volumes Configuration (for standalone MongoDB/Redis)
+# ============================================
+# Uncomment if using standalone MongoDB/Redis services
+# volumes:
+#   mongodb_data:
+#     driver: local
+#     name: content_bot_mongodb_data
+#   mongodb_config:
+#     driver: local
+#     name: content_bot_mongodb_config
+#   redis_data:
+#     driver: local
+#     name: content_bot_redis_data

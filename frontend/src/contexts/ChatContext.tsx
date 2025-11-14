@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { Message, Chat } from '@/types/chat';
+import { logger } from '@/utils/logger';
 import { 
   startChat, 
   sendMessage as sendChatMessage, 
@@ -35,11 +36,21 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 // Helper function to convert ChatData to Chat
 const convertChatDataToChat = (chatData: ChatData): Chat => {
+  // Handle both 'id' and '_id' fields (Beanie might return _id)
+  const chatId = chatData.id || (chatData as any)._id;
+  
+  if (!chatId) {
+    logger.error('ChatData missing ID:', chatData);
+    throw new Error('Chat data is missing an ID field');
+  }
+  
+  const idString = String(chatId);
+  
   return {
-    id: chatData.id,
+    id: idString,
     title: chatData.title,
     messages: chatData.messages.map((msg, idx) => ({
-      id: `${chatData.id}-${idx}`,
+      id: `${idString}-${idx}`,
       role: msg.role as 'user' | 'assistant',
       content: msg.content,
       timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
@@ -72,7 +83,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const convertedChats = chatDataList.map(convertChatDataToChat);
       setChats(convertedChats);
     } catch (err: any) {
-      console.error('Error loading chat history:', err);
+      logger.error('Error loading chat history:', err);
       // Don't set error here - allow fallback to empty state
     } finally {
       setIsLoading(false);
@@ -111,7 +122,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setCurrentChat(newChat);
     } catch (err: any) {
       setError(err.message || 'Failed to create new chat');
-      console.error('Error creating new chat:', err);
+      logger.error('Error creating new chat:', err);
     } finally {
       setIsLoading(false);
     }
@@ -142,7 +153,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setCurrentChat(chat);
     } catch (err: any) {
       setError(err.message || 'Failed to load chat');
-      console.error('Error selecting chat:', err);
+      logger.error('Error selecting chat:', err);
     } finally {
       setIsLoading(false);
     }
@@ -152,14 +163,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     async (content: string) => {
       if (!content.trim() || isLoading) return;
 
-      let chatToUse = currentChat;
-      let sessionId: string;
-
       try {
         setIsLoading(true);
         setError(null);
 
-        // Create chat if none exists
+        let chatToUse = currentChat;
+        let sessionId: string;
+
+        // Step 1: Ensure we have a valid chat with ID
         if (!chatToUse) {
           const sessionResponse = await startChat();
           sessionId = sessionResponse.session_id;
@@ -167,7 +178,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const chatData = await createChatAPI(sessionId, content.substring(0, 50));
           chatToUse = convertChatDataToChat(chatData);
           
-          // Verify chat was created with valid ID
+          // Validate chat was created successfully
           if (!chatToUse.id) {
             throw new Error('Failed to create chat: No ID returned');
           }
@@ -188,24 +199,27 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           sessionId = chatToUse.sessionId || chatToUse.session_id || '';
         }
 
+        // Step 2: Validate before proceeding (single validation point)
         if (!sessionId) {
           throw new Error('No session ID available');
         }
-
-        // Verify chat has valid ID before proceeding
-        if (!chatToUse || !chatToUse.id) {
-          throw new Error('Chat ID is missing');
+        
+        if (!chatToUse?.id) {
+          throw new Error('Invalid chat state: missing chat ID');
         }
 
-        // Create user message
+        // Store chat ID once to avoid repeated checks
+        const chatId = chatToUse.id;
+
+        // Step 3: Create and save user message
         const userMessage: Message = {
-          id: `${chatToUse.id}-${Date.now()}`,
+          id: `${chatId}-${Date.now()}`,
           role: 'user',
           content,
           timestamp: new Date(),
         };
 
-        // Update UI immediately
+        // Update UI immediately (optimistic update)
         const updatedMessages = [...(chatToUse.messages || []), userMessage];
         const updatedChat = {
           ...chatToUse,
@@ -214,18 +228,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         };
 
         setCurrentChat(updatedChat);
-        setChats(prev => prev.map(c => c.id === updatedChat.id ? updatedChat : c));
+        setChats(prev => prev.map(c => c.id === chatId ? updatedChat : c));
 
-        // Save user message to backend - only if chat has valid ID
-        if (chatToUse.id) {
-          await addMessageAPI(chatToUse.id, {
-            role: 'user',
-            content,
-          });
-        }
+        // Save user message to backend
+        await addMessageAPI(chatId, {
+          role: 'user',
+          content,
+        });
 
-        // Create placeholder for AI message for streaming
-        const aiMessageId = `${chatToUse.id}-${Date.now() + 1}`;
+        // Step 4: Create placeholder for AI message
+        const aiMessageId = `${chatId}-${Date.now() + 1}`;
         const aiMessage: Message = {
           id: aiMessageId,
           role: 'assistant',
@@ -234,7 +246,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           isStreaming: true,
         };
 
-        // Add placeholder message
         const messagesWithPlaceholder = [...updatedMessages, aiMessage];
         const chatWithPlaceholder = {
           ...updatedChat,
@@ -243,21 +254,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         };
 
         setCurrentChat(chatWithPlaceholder);
-        setChats(prev => prev.map(c => c.id === chatWithPlaceholder.id ? chatWithPlaceholder : c));
+        setChats(prev => prev.map(c => c.id === chatId ? chatWithPlaceholder : c));
 
-        // Stream AI response - only if chat has valid ID
-        if (!chatToUse.id) {
-          throw new Error('Chat ID is missing');
-        }
-        
+        // Step 5: Stream AI response
         try {
           await streamMessageAPI(
-            chatToUse.id,
+            chatId,
             content,
             // On chunk received
             (chunk: string) => {
               setCurrentChat(prev => {
-                if (!prev) return prev;
+                if (!prev || prev.id !== chatId) return prev;
                 return {
                   ...prev,
                   messages: prev.messages.map(msg =>
@@ -268,26 +275,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 };
               });
               
-              if (chatToUse && chatToUse.id) {
-                setChats(prev => prev.map(c =>
-                  c.id === chatToUse.id
-                    ? {
-                        ...c,
-                        messages: c.messages.map(msg =>
-                          msg.id === aiMessageId
-                            ? { ...msg, content: msg.content + chunk }
-                            : msg
-                        ),
-                      }
-                    : c
-                ));
-              }
+              setChats(prev => prev.map(c =>
+                c.id === chatId
+                  ? {
+                      ...c,
+                      messages: c.messages.map(msg =>
+                        msg.id === aiMessageId
+                          ? { ...msg, content: msg.content + chunk }
+                          : msg
+                      ),
+                    }
+                  : c
+              ));
             },
-            // On complete
-            async (fullResponse: string) => {
-              // Update message to remove streaming flag
+            // On complete - Backend already saved the message during streaming
+            (fullResponse: string) => {
+              // Update message to remove streaming flag (NO duplicate save)
               setCurrentChat(prev => {
-                if (!prev) return prev;
+                if (!prev || prev.id !== chatId) return prev;
                 return {
                   ...prev,
                   messages: prev.messages.map(msg =>
@@ -299,44 +304,56 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 };
               });
               
-              if (chatToUse.id) {
-                setChats(prev => prev.map(c =>
-                  c.id === chatToUse.id
-                    ? {
-                        ...c,
-                        messages: c.messages.map(msg =>
-                          msg.id === aiMessageId
-                            ? { ...msg, content: fullResponse, isStreaming: false }
-                            : msg
-                        ),
-                        updatedAt: new Date(),
-                      }
-                    : c
-                ));
-
-                // Save AI message to backend (already saved during streaming, but update timestamp)
-                await addMessageAPI(chatToUse.id, {
-                  role: 'assistant',
-                  content: fullResponse,
-                });
-              }
+              setChats(prev => prev.map(c =>
+                c.id === chatId
+                  ? {
+                      ...c,
+                      messages: c.messages.map(msg =>
+                        msg.id === aiMessageId
+                          ? { ...msg, content: fullResponse, isStreaming: false }
+                          : msg
+                      ),
+                      updatedAt: new Date(),
+                    }
+                  : c
+              ));
+              // NOTE: Backend already saved the AI message during streaming, so no need to save again
             },
             // On error
             (error: string) => {
               setError(error);
               // Remove streaming message on error
               setCurrentChat(prev => {
-                if (!prev) return prev;
+                if (!prev || prev.id !== chatId) return prev;
                 return {
                   ...prev,
                   messages: prev.messages.filter(msg => msg.id !== aiMessageId),
                 };
               });
+              
+              setChats(prev => prev.map(c =>
+                c.id === chatId
+                  ? {
+                      ...c,
+                      messages: c.messages.filter(msg => msg.id !== aiMessageId),
+                    }
+                  : c
+              ));
             }
           );
         } catch (streamError: any) {
           // Fallback to non-streaming if streaming fails
-          console.warn('Streaming failed, falling back to regular request:', streamError);
+          logger.warn('Streaming failed, falling back to regular request:', streamError);
+          
+          // Remove streaming placeholder
+          setCurrentChat(prev => {
+            if (!prev || prev.id !== chatId) return prev;
+            return {
+              ...prev,
+              messages: prev.messages.filter(msg => msg.id !== aiMessageId),
+            };
+          });
+          
           const response = await sendChatMessage(sessionId, content);
 
           // Update with full response
@@ -355,39 +372,36 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           };
 
           setCurrentChat(finalChat);
-          setChats(prev => prev.map(c => c.id === finalChat.id ? finalChat : c));
+          setChats(prev => prev.map(c => c.id === chatId ? finalChat : c));
 
-          // Save AI message to backend - only if chat has valid ID
-          if (chatToUse.id) {
-            await addMessageAPI(chatToUse.id, {
-              role: 'assistant',
-              content: response.message,
-            });
-          }
+          // Save AI message to backend (fallback path)
+          await addMessageAPI(chatId, {
+            role: 'assistant',
+            content: response.message,
+          });
         }
 
         // Refresh chat list to update timestamps
         await loadChatHistory();
         
-        // Reload current chat to get updated messages
-        if (chatToUse && chatToUse.id) {
-          try {
-            const { getChat } = await import('@/lib/chat-api');
-            const updatedChatData = await getChat(chatToUse!.id);
-            const updatedChat = convertChatDataToChat(updatedChatData);
-            setCurrentChat(updatedChat);
+        // Reload current chat to get updated messages from backend
+        try {
+          const { getChat } = await import('@/lib/chat-api');
+          const updatedChatData = await getChat(chatId);
+          const updatedChat = convertChatDataToChat(updatedChatData);
+          setCurrentChat(updatedChat);
           } catch (e) {
-            console.error('Failed to reload chat:', e);
+            logger.error('Failed to reload chat:', e);
+            // Non-critical error, continue
           }
-        }
       } catch (err: any) {
         setError(err.message || 'Failed to send message');
-        console.error('Error sending message:', err);
+        logger.error('Error sending message:', err);
       } finally {
         setIsLoading(false);
       }
     },
-    [currentChat, chats, isLoading, loadChatHistory]
+    [currentChat, isLoading, loadChatHistory]
   );
 
   const uploadFile = useCallback(
@@ -468,7 +482,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         await loadChatHistory();
       } catch (err: any) {
         setError(err.message || 'Failed to upload file');
-        console.error('Error uploading file:', err);
+        logger.error('Error uploading file:', err);
       } finally {
         setIsLoading(false);
       }
@@ -494,7 +508,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       } catch (err: any) {
         setError(err.message || 'Failed to delete chat');
-        console.error('Error deleting chat:', err);
+        logger.error('Error deleting chat:', err);
       } finally {
         setIsLoading(false);
       }
@@ -514,7 +528,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const convertedChats = results.map(convertChatDataToChat);
       setChats(convertedChats);
     } catch (err: any) {
-      console.error('Search failed:', err);
+      logger.error('Search failed:', err);
       // Fall back to loading all chats
       await loadChatHistory();
     } finally {

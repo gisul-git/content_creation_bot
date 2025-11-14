@@ -2,6 +2,7 @@
  * Chat API functions for communicating with the backend chatbot.
  */
 import api from './api';
+import { logger } from '../utils/logger';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -44,7 +45,7 @@ export async function startChat(message?: string): Promise<ChatStartResponse> {
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error starting chat:', error);
+    logger.apiError('/chat/start', error);
     throw new Error(error.response?.data?.detail || 'Failed to start chat');
   }
 }
@@ -63,7 +64,7 @@ export async function sendMessage(
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error sending message:', error);
+    logger.apiError('/chat/answer', error);
     throw new Error(error.response?.data?.detail || 'Failed to send message');
   }
 }
@@ -82,7 +83,7 @@ export async function confirmGeneration(
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error confirming generation:', error);
+    logger.apiError('/chat/confirm', error);
     throw new Error(error.response?.data?.detail || 'Failed to confirm');
   }
 }
@@ -108,7 +109,7 @@ export async function uploadFile(
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error uploading file:', error);
+    logger.apiError('/chat/upload', error);
     throw new Error(error.response?.data?.detail || 'Failed to upload file');
   }
 }
@@ -126,7 +127,7 @@ export async function getSession(sessionId: string) {
     const response = await api.get(`/chat/session/${sessionId}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error getting session:', error);
+    logger.apiError('/chat/session', error);
     throw new Error(error.response?.data?.detail || 'Failed to get session');
   }
 }
@@ -178,7 +179,7 @@ export async function getChats(skip = 0, limit = 50): Promise<ChatData[]> {
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error getting chats:', error);
+    logger.apiError('/api/chats/', error);
     throw new Error(error.response?.data?.detail || 'Failed to get chats');
   }
 }
@@ -191,7 +192,7 @@ export async function getChat(chatId: string): Promise<ChatData> {
     const response = await api.get<ChatData>(`/api/chats/${chatId}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error getting chat:', error);
+    logger.apiError(`/api/chats/${chatId}`, error);
     throw new Error(error.response?.data?.detail || 'Failed to get chat');
   }
 }
@@ -205,10 +206,25 @@ export async function createChat(sessionId: string, title = 'New Chat'): Promise
       session_id: sessionId,
       title
     });
+    
+    // Log the response to debug ID issues
+    logger.apiResponse('/api/chats/', response.data);
+    
+    // Validate response has ID
+    if (!response.data.id && !(response.data as any)._id) {
+      logger.error('Chat response missing ID:', response.data);
+      throw new Error('Chat response missing ID field');
+    }
+    
+    // Ensure ID is a string (handle both id and _id)
+    if (!response.data.id && (response.data as any)._id) {
+      response.data.id = String((response.data as any)._id);
+    }
+    
     return response.data;
   } catch (error: any) {
-    console.error('Error creating chat:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to create chat');
+    logger.apiError('/api/chats/', error);
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to create chat');
   }
 }
 
@@ -223,7 +239,7 @@ export async function addMessage(
     const response = await api.put(`/api/chats/${chatId}/messages`, message);
     return response.data;
   } catch (error: any) {
-    console.error('Error adding message:', error);
+    logger.apiError(`/api/chats/${chatId}/messages`, error);
     throw new Error(error.response?.data?.detail || 'Failed to add message');
   }
 }
@@ -236,7 +252,7 @@ export async function deleteChat(chatId: string): Promise<{ success: boolean }> 
     const response = await api.delete(`/api/chats/${chatId}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error deleting chat:', error);
+    logger.apiError(`/api/chats/${chatId}`, error);
     throw new Error(error.response?.data?.detail || 'Failed to delete chat');
   }
 }
@@ -251,7 +267,7 @@ export async function searchChats(query: string, limit = 20): Promise<ChatData[]
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error searching chats:', error);
+    logger.apiError('/api/chats/search/', error);
     throw new Error(error.response?.data?.detail || 'Failed to search chats');
   }
 }
@@ -264,7 +280,7 @@ export async function shareChat(chatId: string): Promise<{ share_url: string; to
     const response = await api.post(`/api/chats/${chatId}/share`);
     return response.data;
   } catch (error: any) {
-    console.error('Error sharing chat:', error);
+    logger.apiError(`/api/chats/${chatId}/share`, error);
     throw new Error(error.response?.data?.detail || 'Failed to share chat');
   }
 }
@@ -277,7 +293,7 @@ export async function getSharedChat(token: string): Promise<ChatData> {
     const response = await api.get<ChatData>(`/api/chats/shared/${token}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error getting shared chat:', error);
+    logger.apiError(`/api/chats/shared/${token}`, error);
     throw new Error(error.response?.data?.detail || 'Failed to get shared chat');
   }
 }
@@ -290,7 +306,7 @@ export async function unshareChat(chatId: string): Promise<{ success: boolean }>
     const response = await api.delete(`/api/chats/${chatId}/share`);
     return response.data;
   } catch (error: any) {
-    console.error('Error unsharing chat:', error);
+    logger.apiError(`/api/chats/${chatId}/share`, error);
     throw new Error(error.response?.data?.detail || 'Failed to unshare chat');
   }
 }
@@ -309,7 +325,7 @@ export async function toggleReaction(
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error toggling reaction:', error);
+    logger.apiError(`/api/chats/${chatId}/messages/${messageIndex}/reaction`, error);
     throw new Error(error.response?.data?.detail || 'Failed to toggle reaction');
   }
 }
@@ -328,7 +344,7 @@ export async function getChatMessages(
     });
     return response.data;
   } catch (error: any) {
-    console.error('Error getting messages:', error);
+    logger.apiError(`/api/chats/${chatId}/messages`, error);
     throw new Error(error.response?.data?.detail || 'Failed to get messages');
   }
 }
@@ -344,7 +360,7 @@ export async function regenerateMessage(
     const response = await api.post(`/api/chats/${chatId}/regenerate/${messageIndex}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error regenerating message:', error);
+    logger.apiError(`/api/chats/${chatId}/regenerate/${messageIndex}`, error);
     throw new Error(error.response?.data?.detail || 'Failed to regenerate message');
   }
 }
@@ -411,12 +427,12 @@ export async function streamMessage(
             onChunk(data.chunk);
           }
         } catch (e) {
-          console.error('Failed to parse chunk:', e, line);
+          logger.error('Failed to parse stream chunk:', e, line);
         }
       }
     }
   } catch (error: any) {
-    console.error('Error streaming message:', error);
+    logger.apiError(`/api/chats/${chatId}/stream`, error);
     if (onError) {
       onError(error.message || 'Failed to stream message');
     }

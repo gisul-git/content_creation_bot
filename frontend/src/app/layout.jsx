@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ChatProvider } from '@/contexts/ChatContext'
+import ClientErrorBoundary from '@/components/ClientErrorBoundary'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -74,9 +75,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={inter.variable}>
       <body className={inter.className}>
-        <AuthProvider>
-          <ChatProvider>{children}</ChatProvider>
-        </AuthProvider>
+        <ClientErrorBoundary>
+          <AuthProvider>
+            <ChatProvider>{children}</ChatProvider>
+          </AuthProvider>
+        </ClientErrorBoundary>
       </body>
     </html>
   )

@@ -79,8 +79,18 @@ async def create_chat(
             messages=[]
         )
         await chat.insert()
+        # Ensure id is properly set (Beanie sets it after insert)
+        if not chat.id:
+            raise ValueError("Chat ID was not set after insert")
+        
+        # Refresh to ensure all fields are set
+        await chat.fetch()
+        
         return chat
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating chat: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create chat: {str(e)}")
 
 
@@ -364,27 +374,34 @@ async def stream_message(
             if len(chat.messages) == 1:
                 chat.title = request.message[:50] + ('...' if len(request.message) > 50 else '')
             
+            # Save user message immediately
             await chat.save()
             
             # Stream AI response using router agent
             session_id = chat.session_id
             full_response = ""
             
-            # For streaming, we'll simulate by chunking the response
-            # In production, integrate with actual streaming AI service
+            # NOTE: This is currently simulating streaming by chunking a complete response
+            # In production, integrate with actual streaming AI service (OpenAI streaming API, etc.)
+            # For now, we fetch the full response and chunk it for UX purposes
             try:
                 response = router_agent.route_request(session_id, request.message)
                 ai_message_text = response.get("message", "")
                 
-                # Simulate streaming by chunking the response
-                chunk_size = 5  # Characters per chunk
+                # Stream in chunks for better UX (chunking complete response)
+                # TODO: Replace with real streaming when router_agent supports it:
+                # async for chunk in router_agent.stream_request(session_id, request.message):
+                #     full_response += chunk
+                #     yield json.dumps({"chunk": chunk, "done": False}) + "\n"
+                
+                chunk_size = 10  # Characters per chunk
                 for i in range(0, len(ai_message_text), chunk_size):
                     chunk = ai_message_text[i:i + chunk_size]
                     full_response += chunk
                     yield json.dumps({"chunk": chunk, "done": False}) + "\n"
-                    await asyncio.sleep(0.02)  # Small delay for smooth streaming
+                    await asyncio.sleep(0.01)  # Small delay for smooth streaming
                 
-                # Add AI message to chat
+                # Save AI message ONCE at the end (not during streaming)
                 ai_msg = Message(
                     role='assistant',
                     content=full_response,

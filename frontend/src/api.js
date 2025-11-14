@@ -1,6 +1,7 @@
 /**
  * API communication layer for chatbot.
  */
+import { logger } from './utils/logger';
 
 // Use Next.js environment variable or fallback to default
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:8000';
@@ -34,10 +35,10 @@ export async function startChat(message = null) {
     }
 
     const data = await response.json();
-    console.log('API Response:', data); // Debug log
+    logger.apiResponse('/chat/start', data);
     return data;
   } catch (error) {
-    console.error('Error starting chat:', error);
+    logger.apiError('/chat/start', error);
     if (error.name === 'AbortError') {
       throw new Error('Request timed out. The server is taking too long to respond.');
     }
@@ -73,15 +74,15 @@ export async function sendAnswer(sessionId, message) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error:', response.status, errorText);
+      logger.apiError('/chat/answer', { status: response.status, message: errorText });
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('API Response:', data); // Debug log
+    logger.apiResponse('/chat/answer', data);
     return data;
   } catch (error) {
-    console.error('Error sending answer:', error);
+    logger.apiError('/chat/answer', error);
     if (error.name === 'AbortError') {
       throw new Error('Request timed out. The server is taking too long to respond.');
     }
@@ -142,15 +143,15 @@ export async function uploadFile(sessionId, file) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Upload error:', response.status, errorText);
+      logger.apiError('/chat/upload', { status: response.status, message: errorText });
       throw new Error(`HTTP error! status: ${response.status}, ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('Upload response:', data);
+    logger.apiResponse('/chat/upload', data);
     return data;
   } catch (error) {
-    console.error('Error uploading file:', error);
+    logger.apiError('/chat/upload', error);
     throw error;
   }
 }
@@ -180,7 +181,7 @@ export async function updateContext(sessionId, content) {
 
     return await response.json();
   } catch (error) {
-    console.error('Error updating context:', error);
+    logger.apiError('/chat/update_context', error);
     throw error;
   }
 }

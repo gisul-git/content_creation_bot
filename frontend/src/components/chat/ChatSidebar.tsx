@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useChat } from '@/contexts/ChatContext';
 import { exportUtils } from '@/lib/export-utils';
 import { shareChat } from '@/lib/chat-api';
+import { logger } from '@/utils/logger';
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export default function ChatSidebar({ isOpen, onToggle, currentChatId }: ChatSid
   const [hoveredChatId, setHoveredChatId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isSearching, setIsSearching] = React.useState(false);
+  const [searchTimeout, setSearchTimeout] = React.useState<NodeJS.Timeout | null>(null);
 
   const handleDelete = (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
@@ -30,15 +32,34 @@ export default function ChatSidebar({ isOpen, onToggle, currentChatId }: ChatSid
     const query = e.target.value;
     setSearchQuery(query);
     
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
     if (query.length >= 2) {
+      // Debounce search by 300ms
       setIsSearching(true);
-      await searchChats(query);
-      setIsSearching(false);
+      const timeout = setTimeout(async () => {
+        await searchChats(query);
+        setIsSearching(false);
+      }, 300);
+      setSearchTimeout(timeout);
     } else if (query.length === 0) {
       // Reload all chats when search is cleared
+      setIsSearching(false);
       await loadChatHistory();
     }
   };
+  
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
 
   return (
     <>
@@ -197,7 +218,7 @@ export default function ChatSidebar({ isOpen, onToggle, currentChatId }: ChatSid
                                   await navigator.clipboard.writeText(result.share_url);
                                   alert('Share link copied to clipboard!');
                                 } catch (error) {
-                                  console.error('Failed to share chat:', error);
+                                  logger.error('Failed to share chat:', error);
                                   alert('Failed to share chat');
                                 }
                               }}

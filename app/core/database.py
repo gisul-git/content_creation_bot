@@ -12,6 +12,8 @@ from app.models.token import PasswordResetToken, EmailVerificationToken
 from app.models.audit_log import AuditLog
 from app.models.chat import Chat
 import logging
+import certifi
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +25,44 @@ redis_client: aioredis.Redis = None
 
 
 async def connect_to_mongo():
-    """Create database connection to MongoDB."""
+    """Create database connection to MongoDB.
+    
+    Automatically handles:
+    - Local MongoDB (mongodb://localhost:27017) - No SSL needed
+    - MongoDB Atlas (mongodb+srv://...mongodb.net) - SSL required
+    """
     global mongodb_client
     
     try:
-        mongodb_client = AsyncIOMotorClient(settings.MONGODB_URL)
+        mongo_url = settings.MONGODB_URL
+        is_atlas = (
+            ".mongodb.net" in mongo_url.lower() or 
+            "mongodb+srv://" in mongo_url.lower()
+        )
+        
+        # Connection parameters - auto-configure based on connection type
+        if is_atlas:
+            # MongoDB Atlas (cloud) - SSL required
+            logger.info("🔗 Connecting to MongoDB Atlas (cloud)...")
+            mongodb_client = AsyncIOMotorClient(
+                mongo_url,
+                tls=True,
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
+            )
+        else:
+            # Local MongoDB - No SSL needed
+            logger.info("🔗 Connecting to local MongoDB...")
+            mongodb_client = AsyncIOMotorClient(
+                mongo_url,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+            )
+        
+        # Test connection
+        await mongodb_client.admin.command('ping')
+        logger.info("✅ Connected to MongoDB successfully")
         
         # Initialize Beanie with document models
         await init_beanie(
@@ -41,10 +76,26 @@ async def connect_to_mongo():
                 Chat,
             ]
         )
+        logger.info(f"✅ Beanie initialized with database: {settings.MONGODB_DB_NAME}")
         
-        logger.info("Connected to MongoDB")
     except Exception as e:
-        logger.error(f"Error connecting to MongoDB: {e}")
+        logger.error(f"❌ Error connecting to MongoDB: {e}")
+        
+        # Mask connection string
+        masked = mongo_url.split('@')[-1] if '@' in mongo_url else mongo_url
+        logger.error(f"Connection: ***@{masked}")
+        
+        # Helpful tips
+        if is_atlas and ("SSL" in str(e) or "TLS" in str(e)):
+            logger.error("💡 MongoDB Atlas SSL Error - Try:")
+            logger.error("   1. Check your IP is whitelisted in Atlas Network Access")
+            logger.error("   2. Verify connection string is correct")
+            logger.error("   3. Run: pip install --upgrade certifi")
+        elif not is_atlas:
+            logger.error("💡 Local MongoDB Error - Check:")
+            logger.error("   1. MongoDB is running: mongod")
+            logger.error("   2. Connection string: mongodb://localhost:27017")
+        
         raise
 
 
